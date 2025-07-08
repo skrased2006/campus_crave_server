@@ -94,6 +94,80 @@ async function run() {
     });
 
 
+    app.post('/users', async (req, res) => {
+      const user = req.body;
+      const newUser = await usersCollection.insertOne(user);
+      res.status(201).send({ message: 'User created', userId: newUser._id });
+    });
+
+    // server/routes/userRoutes.js or inside your Express route file
+    app.get("/users", async (req, res) => {
+      const search = req.query.search || "";
+      const query = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ],
+      };
+      const users = await usersCollection.find(query).toArray();
+      res.send(users);
+    });
+
+    app.patch("/users/admin/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { role: "admin" } }
+      );
+      res.send(result);
+    });
+    // Assuming usersCollection is your MongoDB collection
+    app.patch('/users/:id/role', async (req, res) => {
+      const userId = req.params.id;
+      const { role } = req.body;
+
+      try {
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(userId) },
+          { $set: { role: role } }
+        );
+
+        res.send(result);
+      } catch (err) {
+        console.error('Failed to update role:', err);
+        res.status(500).send({ message: 'Failed to update role' });
+      }
+    });
+
+    // Example route: server-side code (Node.js + Express)
+
+    app.get('/users/search', async (req, res) => {
+      const query = req.query.query;
+
+      if (!query) {
+        return res.status(400).send({ message: 'Search query required' });
+      }
+
+      try {
+        const result = await usersCollection.find({
+          $or: [
+            { email: { $regex: query, $options: 'i' } },
+            { name: { $regex: query, $options: 'i' } },
+          ],
+        }).toArray();
+
+        res.send(result);
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: 'Server Error' });
+      }
+    });
+
+
+
+
+
+
 
 
     await client.db("admin").command({ ping: 1 });
