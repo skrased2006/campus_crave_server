@@ -46,7 +46,8 @@ async function run() {
     const reviewsCollection = db.collection("reviews");
     const paymentsCollection = db.collection("payment");
     const likesCollection = db.collection("likes");
-    const mealRequestsCollection = db.collection('mealRequests')
+    const mealRequestsCollection = db.collection('mealRequests');
+    const upcomingMealsCollection = db.collection('upcomingMeals');
 
     // ========== Meal Routes ==========
 
@@ -306,16 +307,70 @@ async function run() {
       res.send({ insertedId: result.insertedId, review });
     });
 
+    // ✅ Correct Backend Route
+    app.get("/my-reviews/:email", async (req, res) => {
+      const email = req.params.email;
+
+      try {
+        const reviews = await reviewsCollection
+          .find({ email: email }) // ⬅️ match with "email" field
+          .sort({ time: -1 })
+          .toArray();
+
+        res.send(reviews);
+      } catch (error) {
+        console.error("Error fetching user reviews:", error);
+        res.status(500).send({ message: "Server error" });
+      }
+    });
+
+    app.get("/reviews", async (req, res) => {
+      try {
+        const reviews = await reviewsCollection
+          .find()
+          .sort({ time: -1 }) // latest first
+          .toArray();
+        res.send(reviews);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to fetch reviews" });
+      }
+    });
+
+
     app.get("/reviews/:mealId", async (req, res) => {
       const mealId = req.params.mealId;
 
-      const reviews = await reviewsCollection
-        .find({ mealId })
-        .sort({ time: -1 }) // Latest first
-        .toArray();
+      try {
+        const reviews = await reviewsCollection
+          .find({ mealId })
+          .sort({ time: -1 }) // নতুন আগে
+          .toArray();
 
-      res.send(reviews);
+        res.send(reviews);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to fetch reviews" });
+      }
     });
+
+    app.delete('/reviews/:id', async (req, res) => {
+      const id = req.params.id;
+
+      const result = await reviewsCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+    app.patch('/reviews/:id', async (req, res) => {
+      const id = req.params.id;
+      const { review } = req.body;
+
+      const result = await reviewsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { review } }
+      );
+
+      res.send(result);
+    });
+
+
 
 
     // meal request
