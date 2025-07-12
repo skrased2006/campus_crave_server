@@ -377,10 +377,10 @@ async function run() {
 
 
     app.post('/meal-requests', async (req, res) => {
-      const { mealId, userEmail, userName } = req.body;
+      const { mealId, userEmail, userName, mealTitle } = req.body;
 
       const user = await usersCollection.findOne({ email: userEmail });
-      console.log("USER:", user); // 🐞 Debug
+
 
       if (!user || user.badge?.toLowerCase() === 'bronze') {
         return res.status(403).send({ message: 'Only premium users can request meals.' });
@@ -391,11 +391,12 @@ async function run() {
         return res.status(400).send({ message: 'You have already requested this meal.' });
       }
 
-      const result = await db.collection('mealRequests').insertOne({
+      const result = await mealRequestsCollection.insertOne({
         mealId: new ObjectId(mealId),
         userEmail,
         userName,
         status: 'pending',
+        mealTitle,
         requestedAt: new Date(),
       });
 
@@ -579,6 +580,49 @@ async function run() {
       // আপডেটের রেজাল্ট রিটার্ন করবে
       res.send(result);
     });
+
+
+
+
+    // serve meal
+
+    // GET /meal-requests?search=keyword
+    app.get('/meal-requests', async (req, res) => {
+      try {
+        const search = req.query.search || "";
+
+        const filter = {
+          $or: [
+            { userName: { $regex: search, $options: "i" } },
+            { userEmail: { $regex: search, $options: "i" } }
+          ]
+        };
+
+        const result = await mealRequestsCollection.find(filter).sort({ requestTime: -1 }).toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to load meal requests", error });
+      }
+    });
+
+    // PATCH /meal-requests/:id/deliver
+    app.patch('/meal-requests/:id/deliver', async (req, res) => {
+      const id = req.params.id;
+
+      try {
+        const result = await mealRequestsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: 'delivered' } }
+        );
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to update status", error });
+      }
+    });
+
+
+
 
 
 
