@@ -457,6 +457,137 @@ async function run() {
 
 
 
+    // upcomming meals
+    app.post('/upcoming-meals', async (req, res) => {
+      const {
+        title,
+        category,
+        price,
+        ingredients,
+        image,
+        distributor,
+        description,
+        rating,
+      } = req.body;
+      console.log('Incoming meal data:', req.body);
+
+      if (
+        !title ||
+        !category ||
+        !price ||
+        !ingredients ||
+        !image ||
+        !distributor ||
+        !description ||
+        rating === undefined || rating === null
+      ) {
+        return res.status(400).send({ message: 'Missing required fields' });
+      }
+
+
+      const meal = {
+        title,
+        category,
+        price,
+        ingredients,
+        image,
+        distributor,
+        description,
+        rating,
+        likes: 0,
+        postTime: new Date()
+      };
+
+      const result = await upcomingMealsCollection.insertOne(meal);
+      res.send(result);
+    });
+
+    app.post("/publish-meal/:id", async (req, res) => {
+      const id = req.params.id;
+
+      try {
+        // ১. প্রথমে upcoming-meals collection থেকে ওই meal খুঁজে বের করো
+        const meal = await upcomingMealsCollection.findOne({ _id: new ObjectId(id) });
+        if (!meal) {
+          return res.status(404).send({ message: "Meal not found" });
+        }
+
+        // ২. meals collection এ add করো
+        const { insertedId } = await mealsCollection.insertOne(meal);
+
+        if (!insertedId) {
+          return res.status(500).send({ message: "Failed to publish meal" });
+        }
+
+        // ৩. চাইলে ওই upcoming meal টা ডিলিট করতে পারো অথবা ডিলিট না করেও রাখতে পারো
+        await upcomingMealsCollection.deleteOne({ _id: new ObjectId(id) });
+
+        res.send({ message: "Meal published successfully" });
+      } catch (error) {
+        console.error("Publish meal error:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+    app.get("/upcoming-meals", async (req, res) => {
+      try {
+        // সকল upcoming meals ডাটাবেজ থেকে নিয়ে আসবে
+        const meals = await upcomingMealsCollection
+          .find({})
+          .sort({ likes: -1 })   // likes অনুসারে sorting (বেশি liked গুলো উপরে)
+          .toArray();
+
+        res.send(meals);
+      } catch (error) {
+        console.error("Error fetching upcoming meals:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+
+    // ✅ Like an upcoming meal by ID
+    app.patch('/upcoming-meals/like/:id', async (req, res) => {
+      const mealId = req.params.id;           // URL থেকে meal এর id নিয়ে আসছে
+      const userEmail = req.body.userEmail;  // রিকোয়েস্ট বডি থেকে ইউজারের ইমেইল নিচ্ছে
+
+      // ডাটাবেজ থেকে meal খুঁজছে
+      const meal = await upcomingMealsCollection.findOne({ _id: new ObjectId(mealId) });
+
+      // meal না পাওয়া গেলে 404 রেসপন্স দিবে
+      if (!meal) {
+        return res.status(404).send({ message: 'Meal not found' });
+      }
+
+      // দেখে নিচ্ছে user ইতিমধ্যে like দিয়েছে কিনা
+      const alreadyLiked = meal.likedUsers?.includes(userEmail);
+      if (alreadyLiked) {
+        return res.send({ message: 'Already liked' }); // যদি like দিয়ে থাকে, তাহলে মেসেজ রিটার্ন
+      }
+
+      // যদি like না দিয়ে থাকে, তাহলে likes 1 বাড়াবে এবং likedUsers এ userEmail যোগ করবে
+      const updateDoc = {
+        $inc: { likes: 1 },
+        $push: { likedUsers: userEmail },
+      };
+
+      // ডাটাবেজে আপডেট করবে
+      const result = await upcomingMealsCollection.updateOne(
+        { _id: new ObjectId(mealId) },
+        updateDoc
+      );
+
+      // আপডেটের রেজাল্ট রিটার্ন করবে
+      res.send(result);
+    });
+
+
+
+
+
+
+
+
+
 
 
     // ========== MongoDB Connection Test ==========
