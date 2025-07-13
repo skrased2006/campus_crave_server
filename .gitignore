@@ -1,3 +1,4 @@
 nodu_modules
 .env
 .vercel
+firebase_admin.json
