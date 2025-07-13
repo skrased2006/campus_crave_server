@@ -20,7 +20,7 @@ app.use(cookieParser());
 
 
 
-var serviceAccount = require("./firebase_admin.json");
+var serviceAccount = require("./admin.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -80,6 +80,19 @@ const verifyFBToken = async (req, res, next) => {
 }
 
 
+const verifyAdmin = async (req, res, next) => {
+  const email = req.decoded.email; // from verifyFBToken
+  const query = { email };
+
+  const user = await usersCollection.findOne(query);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).send({ message: 'forbidden access' });
+  }
+
+  next(); // go to the actual route
+};
+
+
 // Add a new meal
 app.post('/meals', async (req, res) => {
   const meal = req.body;
@@ -92,7 +105,7 @@ app.post('/meals', async (req, res) => {
 });
 
 // Get all meals with optional sort                           
-app.get('/allmeals', async (req, res) => {
+app.get('/allmeals', verifyFBToken, async (req, res) => {
   const sortBy = req.query.sortBy || 'likes';
   const sortOrder = req.query.order === 'asc' ? 1 : -1;
   const sortOption = {};
@@ -181,7 +194,7 @@ app.post('/users', async (req, res) => {
 });
 
 // Search users (name or email)
-app.get("/users/search", async (req, res) => {
+app.get("/users/search", verifyFBToken, async (req, res) => {
   const query = req.query.query;
   if (!query) return res.status(400).send({ message: 'Search query required' });
 
@@ -355,7 +368,7 @@ app.get("/my-reviews/:email", verifyFBToken, async (req, res) => {
   }
 });
 
-app.get("/reviews", async (req, res) => {
+app.get("/reviews", verifyFBToken, verifyAdmin, async (req, res) => {
   try {
     const reviews = await reviewsCollection
       .find()
@@ -561,7 +574,7 @@ app.post("/publish-meal/:id", async (req, res) => {
   }
 });
 
-app.get("/upcoming-meals", async (req, res) => {
+app.get("/upcoming-meals", verifyFBToken, verifyAdmin, async (req, res) => {
   try {
     // সকল upcoming meals ডাটাবেজ থেকে নিয়ে আসবে
     const meals = await upcomingMealsCollection
@@ -618,7 +631,7 @@ app.patch('/upcoming-meals/like/:id', async (req, res) => {
 // serve meal
 
 // GET /meal-requests?search=keyword
-app.get('/meal-requests', async (req, res) => {
+app.get('/meal-requests', verifyFBToken, async (req, res) => {
   try {
     const search = req.query.search || "";
 
