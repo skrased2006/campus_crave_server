@@ -114,6 +114,24 @@ app.get('/allmeals', verifyFBToken, async (req, res) => {
   const meals = await mealsCollection.find().sort(sortOption).toArray();
   res.send(meals);
 });
+// assuming mealsCollection is your MongoDB collection instance
+
+app.delete('/allmeals/:id', async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    const result = await mealsCollection.deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount > 0) {
+      res.send({ deletedCount: result.deletedCount });
+    } else {
+      res.status(404).send({ message: "Meal not found" });
+    }
+  } catch (error) {
+    console.error("Delete meal error:", error);
+    res.status(500).send({ message: "Internal server error" });
+  }
+});
+
 
 // Paginated meals by category
 app.get('/meals', async (req, res) => {
@@ -195,17 +213,24 @@ app.post('/users', async (req, res) => {
 
 // Search users (name or email)
 app.get("/users/search", verifyFBToken, async (req, res) => {
-  const query = req.query.query;
-  if (!query) return res.status(400).send({ message: 'Search query required' });
+  const query = req.query.query || "";
 
-  const result = await usersCollection.find({
-    $or: [
-      { email: { $regex: query, $options: 'i' } },
-      { name: { $regex: query, $options: 'i' } },
-    ],
-  }).toArray();
+  const filter = query
+    ? {
+      $or: [
+        { email: { $regex: query, $options: "i" } },
+        { name: { $regex: query, $options: "i" } },
+      ],
+    }
+    : {}; // যদি query না থাকে, তাহলে খালি filter = সব ইউজার
 
-  res.send(result);
+  try {
+    const result = await usersCollection.find(filter).toArray();
+    res.send(result);
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).send({ message: "Internal server error" });
+  }
 });
 
 // Update user role
@@ -370,15 +395,40 @@ app.get("/my-reviews/:email", verifyFBToken, async (req, res) => {
 
 app.get("/reviews", verifyFBToken, verifyAdmin, async (req, res) => {
   try {
+    // সব রিভিউ আনো
     const reviews = await reviewsCollection
       .find()
-      .sort({ time: -1 }) // latest first
+      .sort({ time: -1 })
       .toArray();
-    res.send(reviews);
+
+    // mealId অনুযায়ী reviews_count হিসেব করো
+    const counts = await reviewsCollection.aggregate([
+      {
+        $group: {
+          _id: "$mealId",
+          reviews_count: { $sum: 1 }
+        }
+      }
+    ]).toArray();
+
+    // সহজে access করার জন্য একটি map বানাই
+    const countMap = {};
+    counts.forEach((item) => {
+      countMap[item._id] = item.reviews_count;
+    });
+
+    // প্রতিটি review-এর সাথে reviews_count যুক্ত করো
+    const result = reviews.map((r) => ({
+      ...r,
+      reviews_count: countMap[r.mealId] || 0
+    }));
+
+    res.send(result);
   } catch (err) {
     res.status(500).send({ message: "Failed to fetch reviews" });
   }
 });
+
 
 
 app.get("/reviews/:mealId", async (req, res) => {
@@ -574,7 +624,7 @@ app.post("/publish-meal/:id", async (req, res) => {
   }
 });
 
-app.get("/upcoming-meals", verifyFBToken, verifyAdmin, async (req, res) => {
+app.get("/upcoming-meals", verifyFBToken, async (req, res) => {
   try {
     // সকল upcoming meals ডাটাবেজ থেকে নিয়ে আসবে
     const meals = await upcomingMealsCollection
@@ -664,6 +714,48 @@ app.patch('/meal-requests/:id/deliver', async (req, res) => {
     res.status(500).send({ message: "Failed to update status", error });
   }
 });
+
+
+
+
+// admin dashboard 
+
+app.get("/admin/dashboard-stats", verifyFBToken, async (req, res) => {
+  const totalMeals = await mealsCollection.countDocuments();
+  const totalReviews = await reviewsCollection.countDocuments();
+  const totalLikes = await mealsCollection.aggregate([
+    { $group: { _id: null, totalLikes: { $sum: "$likes" } } }
+  ]).toArray();
+  const totalRequests = await mealRequestsCollection.countDocuments();
+
+  res.send({
+    totalMeals,
+    totalReviews,
+    totalLikes: totalLikes[0]?.totalLikes || 0,
+    totalRequests
+  });
+});
+
+
+// user dashboard
+
+app.get("/user/dashboard-stats", verifyFBToken, async (req, res) => {
+  const email = req.query.email;
+
+  const requestedMeals = await mealRequestsCollection.countDocuments({ userEmail: email });
+  const reviews = await reviewsCollection.countDocuments({ email });
+  const payments = await paymentsCollection.countDocuments({ email });
+  const user = await usersCollection.findOne({ email });
+
+  res.send({
+    requestedMeals,
+    reviews,
+    payments,
+    badge: user?.badge || "Bronze",
+  });
+});
+
+
 
 
 
