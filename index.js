@@ -498,6 +498,21 @@ app.post('/meal-requests', async (req, res) => {
 });
 
 
+// Example server route (Express)
+app.put("/meals/:id", async (req, res) => {
+  const id = req.params.id;
+  const updatedData = req.body;
+
+  const result = await mealsCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: updatedData }
+  );
+
+  res.send(result);
+});
+
+
+
 
 // Get requested meals for a user
 app.get('/meal-requests/:email', verifyFBToken, async (req, res) => {
@@ -624,7 +639,7 @@ app.post("/publish-meal/:id", async (req, res) => {
   }
 });
 
-app.get("/upcoming-meals", verifyFBToken, async (req, res) => {
+app.get("/upcoming-meals", async (req, res) => {
   try {
     // সকল upcoming meals ডাটাবেজ থেকে নিয়ে আসবে
     const meals = await upcomingMealsCollection
@@ -720,7 +735,7 @@ app.patch('/meal-requests/:id/deliver', async (req, res) => {
 
 // admin dashboard 
 
-app.get("/admin/dashboard-stats", verifyFBToken, async (req, res) => {
+app.get("/admin/dashboard-stats", verifyFBToken, verifyAdmin, async (req, res) => {
   const totalMeals = await mealsCollection.countDocuments();
   const totalReviews = await reviewsCollection.countDocuments();
   const totalLikes = await mealsCollection.aggregate([
