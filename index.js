@@ -12,7 +12,7 @@ const port = process.env.PORT || 5000;
 
 
 app.use(cors({
-  origin: ['http://localhost:5173'],
+  origin: ['http://localhost:5173', 'https://campus-crave-4b521.web.app'],
   credentials: true
 }));
 app.use(express.json());
@@ -43,7 +43,7 @@ const client = new MongoClient(uri, {
 });
 
 
-// custom middleware 
+
 
 
 
@@ -81,7 +81,7 @@ const verifyFBToken = async (req, res, next) => {
 
 
 const verifyAdmin = async (req, res, next) => {
-  const email = req.decoded.email; // from verifyFBToken
+  const email = req.decoded.email;
   const query = { email };
 
   const user = await usersCollection.findOne(query);
@@ -89,7 +89,7 @@ const verifyAdmin = async (req, res, next) => {
     return res.status(403).send({ message: 'forbidden access' });
   }
 
-  next(); // go to the actual route
+  next();
 };
 
 
@@ -222,7 +222,7 @@ app.get("/users/search", verifyFBToken, async (req, res) => {
         { name: { $regex: query, $options: "i" } },
       ],
     }
-    : {}; // যদি query না থাকে, তাহলে খালি filter = সব ইউজার
+    : {};
 
   try {
     const result = await usersCollection.find(filter).toArray();
@@ -367,7 +367,7 @@ app.post("/reviews", async (req, res) => {
 
   const result = await reviewsCollection.insertOne(review);
 
-  // Optional: meal এর review_count বাড়াতে চাইলে
+
   await mealsCollection.updateOne(
     { _id: new ObjectId(review.mealId) },
     { $inc: { reviews_count: 1 } }
@@ -382,7 +382,7 @@ app.get("/my-reviews/:email", verifyFBToken, async (req, res) => {
 
   try {
     const reviews = await reviewsCollection
-      .find({ email: email }) // ⬅️ match with "email" field
+      .find({ email: email })
       .sort({ time: -1 })
       .toArray();
 
@@ -395,13 +395,12 @@ app.get("/my-reviews/:email", verifyFBToken, async (req, res) => {
 
 app.get("/reviews", verifyFBToken, verifyAdmin, async (req, res) => {
   try {
-    // সব রিভিউ আনো
+
     const reviews = await reviewsCollection
       .find()
       .sort({ time: -1 })
       .toArray();
 
-    // mealId অনুযায়ী reviews_count হিসেব করো
     const counts = await reviewsCollection.aggregate([
       {
         $group: {
@@ -411,13 +410,13 @@ app.get("/reviews", verifyFBToken, verifyAdmin, async (req, res) => {
       }
     ]).toArray();
 
-    // সহজে access করার জন্য একটি map বানাই
+
     const countMap = {};
     counts.forEach((item) => {
       countMap[item._id] = item.reviews_count;
     });
 
-    // প্রতিটি review-এর সাথে reviews_count যুক্ত করো
+
     const result = reviews.map((r) => ({
       ...r,
       reviews_count: countMap[r.mealId] || 0
@@ -437,7 +436,7 @@ app.get("/reviews/:mealId", async (req, res) => {
   try {
     const reviews = await reviewsCollection
       .find({ mealId })
-      .sort({ time: -1 }) // নতুন আগে
+      .sort({ time: -1 })
       .toArray();
 
     res.send(reviews);
@@ -616,20 +615,18 @@ app.post("/publish-meal/:id", async (req, res) => {
   const id = req.params.id;
 
   try {
-    // ১. প্রথমে upcoming-meals collection থেকে ওই meal খুঁজে বের করো
+
     const meal = await upcomingMealsCollection.findOne({ _id: new ObjectId(id) });
     if (!meal) {
       return res.status(404).send({ message: "Meal not found" });
     }
 
-    // ২. meals collection এ add করো
     const { insertedId } = await mealsCollection.insertOne(meal);
 
     if (!insertedId) {
       return res.status(500).send({ message: "Failed to publish meal" });
     }
 
-    // ৩. চাইলে ওই upcoming meal টা ডিলিট করতে পারো অথবা ডিলিট না করেও রাখতে পারো
     await upcomingMealsCollection.deleteOne({ _id: new ObjectId(id) });
 
     res.send({ message: "Meal published successfully" });
@@ -641,10 +638,10 @@ app.post("/publish-meal/:id", async (req, res) => {
 
 app.get("/upcoming-meals", async (req, res) => {
   try {
-    // সকল upcoming meals ডাটাবেজ থেকে নিয়ে আসবে
+
     const meals = await upcomingMealsCollection
       .find({})
-      .sort({ likes: -1 })   // likes অনুসারে sorting (বেশি liked গুলো উপরে)
+      .sort({ likes: -1 })
       .toArray();
 
     res.send(meals);
@@ -657,38 +654,33 @@ app.get("/upcoming-meals", async (req, res) => {
 
 // ✅ Like an upcoming meal by ID
 app.patch('/upcoming-meals/like/:id', async (req, res) => {
-  const mealId = req.params.id;           // URL থেকে meal এর id নিয়ে আসছে
-  const userEmail = req.body.userEmail;  // রিকোয়েস্ট বডি থেকে ইউজারের ইমেইল নিচ্ছে
+  const mealId = req.params.id;
+  const userEmail = req.body.userEmail;
 
-  // ডাটাবেজ থেকে meal খুঁজছে
   const meal = await upcomingMealsCollection.findOne({ _id: new ObjectId(mealId) });
 
-  // meal না পাওয়া গেলে 404 রেসপন্স দিবে
   if (!meal) {
     return res.status(404).send({ message: 'Meal not found' });
   }
 
-  // দেখে নিচ্ছে user ইতিমধ্যে like দিয়েছে কিনা
   const alreadyLiked = meal.likedUsers?.includes(userEmail);
   if (alreadyLiked) {
-    return res.send({ message: 'Already liked' }); // যদি like দিয়ে থাকে, তাহলে মেসেজ রিটার্ন
+    return res.send({ message: 'Already liked' });
   }
 
-  // যদি like না দিয়ে থাকে, তাহলে likes 1 বাড়াবে এবং likedUsers এ userEmail যোগ করবে
   const updateDoc = {
     $inc: { likes: 1 },
     $push: { likedUsers: userEmail },
   };
 
-  // ডাটাবেজে আপডেট করবে
   const result = await upcomingMealsCollection.updateOne(
     { _id: new ObjectId(mealId) },
     updateDoc
   );
 
-  // আপডেটের রেজাল্ট রিটার্ন করবে
   res.send(result);
 });
+
 
 
 
@@ -714,7 +706,6 @@ app.get('/meal-requests', verifyFBToken, async (req, res) => {
   }
 });
 
-// PATCH /meal-requests/:id/deliver
 app.patch('/meal-requests/:id/deliver', async (req, res) => {
   const id = req.params.id;
 
