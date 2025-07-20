@@ -205,11 +205,18 @@ app.get('/admin_meals', async (req, res) => {
 // ========== User Routes ==========
 
 // Create a new user
-app.post('/users', async (req, res) => {
+app.post("/users", async (req, res) => {
   const user = req.body;
-  const newUser = await usersCollection.insertOne(user);
-  res.status(201).send({ message: 'User created', userId: newUser._id });
+  const existingUser = await usersCollection.findOne({ email: user.email });
+
+  if (existingUser) {
+    return res.status(409).send({ message: "User already exists" });
+  }
+
+  const result = await usersCollection.insertOne(user);
+  res.send(result);
 });
+
 
 // Search users (name or email)
 app.get("/users/search", verifyFBToken, async (req, res) => {
@@ -264,6 +271,24 @@ app.patch("/users/badge/:email", async (req, res) => {
 
   res.send(result);
 });
+
+app.patch("/users/:email", async (req, res) => {
+  const email = req.params.email;
+  const updateData = req.body;
+
+  const result = await usersCollection.updateOne(
+    { email },
+    { $set: updateData }
+  );
+
+  res.send(result);
+});
+app.get("/users/:email", async (req, res) => {
+  const email = req.params.email;
+  const user = await usersCollection.findOne({ email });
+  res.send(user);
+});
+
 
 
 // ========== Payment & Subscription ==========
