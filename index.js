@@ -787,6 +787,33 @@ app.get("/user/dashboard-stats", verifyFBToken, async (req, res) => {
 });
 
 
+// recent meals 
+
+// Get recent 8 meals
+app.get("/recent-meals", async (req, res) => {
+  try {
+    const recentMeals = await mealsCollection
+      .find({})
+      .sort({ _id: -1 }) // Sort by newest first (assuming _id increments over time)
+      .limit(8)          // Last 8 added meals
+      .toArray();
+
+    res.send(recentMeals);
+  } catch (error) {
+    console.error("Error fetching recent meals:", error);
+    res.status(500).send({ message: "Failed to fetch recent meals" });
+  }
+});
+
+
+
+
+
+
+app.get('/', (req, res) => {
+  res.send('Welcome to the Campus Crave API!');
+})
+
 
 
 
